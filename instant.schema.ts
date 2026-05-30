@@ -25,12 +25,30 @@ const _schema = i.schema({
       // Roadmap: sharing & public links. Default private.
       isPublic: i.boolean().indexed(),
     }),
+    // One per user: the workspace state synced across devices.
+    sessions: i.entity({
+      // Ordered list of open tab file ids (JSON array of strings).
+      openTabIds: i.json(),
+      // Last focused file, so opening the app restores where you left off.
+      activeFileId: i.string().optional(),
+      updatedAt: i.date(),
+    }),
   },
   links: {
     // file.owner -> $users ; user.files -> files
     fileOwner: {
       forward: { on: "files", has: "one", label: "owner", onDelete: "cascade" },
       reverse: { on: "$users", has: "many", label: "files" },
+    },
+    // session.owner -> $users ; user.session -> session (one-to-one)
+    sessionOwner: {
+      forward: {
+        on: "sessions",
+        has: "one",
+        label: "owner",
+        onDelete: "cascade",
+      },
+      reverse: { on: "$users", has: "one", label: "session" },
     },
   },
 });

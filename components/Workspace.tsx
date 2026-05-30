@@ -22,7 +22,6 @@ const Editor = dynamic(() => import("./Editor"), {
   loading: () => <div className="h-full w-full bg-st-bg" />,
 });
 
-const TABS_KEY = "pasty:openTabs";
 const SAVE_DEBOUNCE_MS = 700;
 const DETECT_DEBOUNCE_MS = 500;
 
@@ -33,6 +32,12 @@ type FileRow = {
   language?: string;
   syntaxLocked?: boolean;
   isPublic?: boolean;
+};
+
+type SessionRow = {
+  id: string;
+  openTabIds?: string[];
+  activeFileId?: string;
 };
 
 export default function Workspace({
@@ -88,21 +93,24 @@ function Editor_Workspace({
     },
   });
 
+  // Separate query so a not-yet-pushed `sessions` namespace can't break `files`.
+  const { data: sessionData } = db.useQuery({
+    sessions: { $: { where: { "owner.id": userId } } },
+  });
+
   const files = useMemo<FileRow[]>(
     () => (data?.files as FileRow[] | undefined) ?? [],
     [data],
   );
 
-  // This subtree only mounts client-side (after auth resolves), so reading
-  // localStorage during lazy init is safe — no SSR/hydration mismatch.
-  const [openIds, setOpenIds] = useState<string[]>(() => {
-    try {
-      const raw = localStorage.getItem(TABS_KEY);
-      return raw ? (JSON.parse(raw) as string[]) : [];
-    } catch {
-      return [];
-    }
-  });
+  // The user's workspace session (one row, synced across devices). We use the
+  // user's id as the session row id so writes are a simple upsert.
+  const session = (sessionData?.sessions as SessionRow[] | undefined)?.[0];
+  const openIds = useMemo<string[]>(
+    () => (session?.openTabIds as string[] | undefined) ?? [],
+    [session],
+  );
+
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [cursor, setCursor] = useState<CursorPos>({ line: 1, col: 1, lines: 1 });
@@ -126,10 +134,22 @@ function Editor_Workspace({
     return openIds;
   }, [openIds, activeFileId]);
 
-  // Sync open tabs to localStorage (external system → no setState in effect).
-  useEffect(() => {
-    localStorage.setItem(TABS_KEY, JSON.stringify(openIds));
-  }, [openIds]);
+  // Upsert the workspace session (open tabs + active file) to the DB. Keyed by
+  // userId so it's a single row per user, synced to every device in real time.
+  const writeSession = useCallback(
+    (openTabIds: string[], activeId: string | null) => {
+      db.transact(
+        db.tx.sessions[userId]
+          .update({
+            openTabIds,
+            activeFileId: activeId ?? undefined,
+            updatedAt: Date.now(),
+          })
+          .link({ owner: userId }),
+      );
+    },
+    [userId],
+  );
 
   const saveNow = useCallback((fileId: string, content: string) => {
     db.transact(
@@ -197,34 +217,30 @@ function Editor_Workspace({
 
   const openFile = useCallback(
     (fileId: string) => {
-      setOpenIds((cur) => {
-        const base =
-          activeFileId && !cur.includes(activeFileId)
-            ? [...cur, activeFileId]
-            : cur;
-        return base.includes(fileId) ? base : [...base, fileId];
-      });
+      const base = effectiveOpenIds;
+      const next = base.includes(fileId) ? base : [...base, fileId];
+      writeSession(next, fileId);
       router.push(`/f/${fileId}`);
     },
-    [router, activeFileId],
+    [effectiveOpenIds, writeSession, router],
   );
 
   const closeTab = useCallback(
     (fileId: string) => {
       flush(fileId);
-      // Compute the next tab set + navigation target from the current snapshot,
-      // then navigate OUTSIDE the state updater (router.push triggers a Router
-      // setState, which must not run during render).
       const base = effectiveOpenIds;
       const idx = base.indexOf(fileId);
       const next = base.filter((x) => x !== fileId);
-      setOpenIds(next);
-      if (fileId === activeFileId) {
-        const neighbor = next[idx] ?? next[idx - 1] ?? null;
+      const closingActive = fileId === activeFileId;
+      const neighbor = closingActive
+        ? (next[idx] ?? next[idx - 1] ?? null)
+        : activeFileId;
+      writeSession(next, neighbor);
+      if (closingActive) {
         router.push(neighbor ? `/f/${neighbor}` : "/");
       }
     },
-    [effectiveOpenIds, activeFileId, flush, router],
+    [effectiveOpenIds, activeFileId, flush, writeSession, router],
   );
 
   const createFile = useCallback(() => {
@@ -305,6 +321,29 @@ function Editor_Workspace({
     activeFile && drafts[activeFile.id] !== undefined
       ? drafts[activeFile.id]
       : (activeFile?.content ?? "");
+
+  // Restore the workspace on a bare visit ("/"): jump to the last active file
+  // (or the first still-open tab) recorded in the synced session.
+  useEffect(() => {
+    if (isLoading || activeFileId) return;
+    const exists = (fid?: string | null) =>
+      Boolean(fid && files.some((f) => f.id === fid));
+    const target =
+      (exists(session?.activeFileId) && session?.activeFileId) ||
+      openIds.find(exists);
+    if (target) router.replace(`/f/${target}`);
+  }, [isLoading, activeFileId, session, openIds, files, router]);
+
+  // Persist a directly-visited file (deep link / reload) into the session so it
+  // becomes an open tab on every device.
+  useEffect(() => {
+    if (isLoading || !activeFileId) return;
+    const ids = (session?.openTabIds as string[] | undefined) ?? [];
+    if (!ids.includes(activeFileId) || session?.activeFileId !== activeFileId) {
+      const next = ids.includes(activeFileId) ? ids : [...ids, activeFileId];
+      writeSession(next, activeFileId);
+    }
+  }, [isLoading, activeFileId, session, writeSession]);
 
   const contentOf = useCallback(
     (f: FileRow) => (drafts[f.id] !== undefined ? drafts[f.id] : f.content),
