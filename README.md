@@ -55,7 +55,7 @@ Open http://localhost:3000. Enter your email, get a one-time code, and you're in
 
 ## InstantDB
 
-Credentials live in `.env.local` (gitignored):
+Credentials live in `.env.local` (gitignored). Copy `.env.example` and fill in:
 
 ```
 NEXT_PUBLIC_INSTANT_APP_ID=…
@@ -70,6 +70,19 @@ npx instant-cli@latest login
 npx instant-cli@latest push schema
 npx instant-cli@latest push perms
 ```
+
+## Deploying
+
+`.env.local` is **not** committed, so set the same vars on your host. Crucially,
+`NEXT_PUBLIC_INSTANT_APP_ID` is inlined at **build time** — it must exist when
+the host runs `next build`, or the build fails prerendering `/` with
+"Missing NEXT_PUBLIC_INSTANT_APP_ID".
+
+**Netlify** (auto-detected; uses `@netlify/plugin-nextjs`):
+
+1. Site configuration → Environment variables → add `NEXT_PUBLIC_INSTANT_APP_ID`
+   (and optionally `INSTANT_ADMIN_TOKEN`).
+2. Deploys → Trigger deploy → **Clear cache and deploy site**.
 
 ## Roadmap
 
