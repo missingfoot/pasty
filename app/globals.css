@@ -1,26 +1,79 @@
 @import "tailwindcss";
 
+/* Sublime Text 4 "Mariana" chrome palette */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --st-bg: #2d3138; /* editor / active surface */
+  --st-bg-dark: #252930; /* sidebar */
+  --st-bg-darker: #21242a; /* tab strip / inactive */
+  --st-bg-tab-inactive: #272b31;
+  --st-fg: #d3d8e0;
+  --st-fg-dim: #8a93a2;
+  --st-fg-faint: #5b657a;
+  --st-accent: #6699cc; /* Mariana blue */
+  --st-green: #99c794;
+  --st-orange: #f99157;
+  --st-border: #1c1f24;
+  --st-hover: #33373f;
+  --st-selection: #3e4754;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-st-bg: var(--st-bg);
+  --color-st-bg-dark: var(--st-bg-dark);
+  --color-st-bg-darker: var(--st-bg-darker);
+  --color-st-bg-tab-inactive: var(--st-bg-tab-inactive);
+  --color-st-fg: var(--st-fg);
+  --color-st-fg-dim: var(--st-fg-dim);
+  --color-st-fg-faint: var(--st-fg-faint);
+  --color-st-accent: var(--st-accent);
+  --color-st-green: var(--st-green);
+  --color-st-orange: var(--st-orange);
+  --color-st-border: var(--st-border);
+  --color-st-hover: var(--st-hover);
+  --color-st-selection: var(--st-selection);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--st-bg);
+  color: var(--st-fg);
+  font-family:
+    var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+}
+
+/* Thin Sublime-style scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #434a55 transparent;
+}
+*::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #434a55;
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #525a67;
+  background-clip: content-box;
+}
+
+/* Make CodeMirror fill its container */
+.cm-editor {
+  height: 100%;
+}
+.cm-editor.cm-focused {
+  outline: none;
 }
